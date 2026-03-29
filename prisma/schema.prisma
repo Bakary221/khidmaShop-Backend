@@ -1,0 +1,142 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENT
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DELIVERED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique
+  email     String?  @unique
+  password  String?
+  role      Role     @default(CLIENT)
+  address   String?
+  avatar    String?
+
+  orders    Order[]
+  otps      OTP[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([phone])
+  @@map("users")
+}
+
+model OTP {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@map("otps")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  image     String   // Image URL
+  active    Boolean  @default(true)
+
+  products  Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  price       Float
+  images      String[] // Array of image URLs
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryId  String
+  brand       String
+  description String   @db.Text
+  sizes       String[] // e.g., ["S", "M", "L", "XL"]
+  colors      String[] // e.g., ["Noir", "Blanc"]
+  featured    Boolean  @default(false)
+  stock       Int
+  rating      Float    @default(0)
+  active      Boolean  @default(true)
+
+  orderItems  OrderItem[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([active])
+  @@map("products")
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  customerName  String
+  phone         String
+  address       String?
+  latitude      Float?
+  longitude     Float?
+  status        OrderStatus @default(PENDING)
+
+  items         OrderItem[]
+  total         Float
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([phone])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                String   @id @default(cuid())
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId           String
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productId         String
+
+  productSnapshot   Json     // Snapshot: { name, price, image, brand }
+  quantity          Int
+  size              String?
+  color             String?
+
+  createdAt         DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}

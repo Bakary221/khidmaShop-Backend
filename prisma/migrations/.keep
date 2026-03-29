@@ -1,0 +1,10 @@
+# Migration file
+# Run: npm run prisma:migrate
+
+# This will create the initial database schema with:
+# - Users (CLIENT + ADMIN roles)
+# - OTPs (for phone authentication)
+# - Categories (with images)
+# - Products (with sizes, colors, featured flag)
+# - Orders (with status tracking)
+# - OrderItems (with snapshots)
