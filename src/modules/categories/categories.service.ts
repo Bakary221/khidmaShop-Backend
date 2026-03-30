@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { CloudinaryService } from '@/common/services/cloudinary.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 import {
   NotFoundException,
@@ -12,7 +13,10 @@ const logger = getLogger('CategoriesService');
 
 @Injectable()
 export class CategoriesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudinary: CloudinaryService,
+  ) {}
 
   async findAll(includeInactive?: boolean) {
     logger.log('Fetching categories');
@@ -39,11 +43,12 @@ export class CategoriesService {
 
   async create(dto: CreateCategoryDto) {
     logger.log(`Creating category: ${dto.name}`);
+    const image = await this.uploadImage(dto.image);
     return this.prisma.category.create({
       data: {
         name: dto.name,
         slug: dto.slug || dto.name.toLowerCase().replace(/\s+/g, '-'),
-        image: dto.image,
+        image,
         active: dto.active ?? true,
       },
     });
@@ -53,10 +58,13 @@ export class CategoriesService {
     logger.log(`Updating category ${id}`);
     await this.findById(id); // Check if exists
 
+    const image = dto.image ? await this.uploadImage(dto.image) : undefined;
+
     return this.prisma.category.update({
       where: { id },
       data: {
         ...dto,
+        ...(image ? { image } : {}),
         slug: dto.slug || (dto.name ? dto.name.toLowerCase().replace(/\s+/g, '-') : undefined),
       },
     });
@@ -65,6 +73,11 @@ export class CategoriesService {
   async toggleActive(id: string, active: boolean) {
     logger.log(`Toggling category ${id} active to ${active}`);
     await this.findById(id); // Check if exists
+
+    await this.prisma.product.updateMany({
+      where: { categoryId: id },
+      data: { active },
+    });
 
     return this.prisma.category.update({
       where: { id },
@@ -93,5 +106,13 @@ export class CategoriesService {
     });
 
     return { message: 'Catégorie supprimée avec succès' };
+  }
+
+  private async uploadImage(image?: string) {
+    if (!image) {
+      return '';
+    }
+
+    return this.cloudinary.upload(image);
   }
 }

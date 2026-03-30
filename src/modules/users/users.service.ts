@@ -108,9 +108,14 @@ export class UsersService {
   }
 
   async getStats() {
-    return this.prisma.user.groupBy({
-      by: ['role'],
-      _count: true,
+    const total = await this.prisma.user.count();
+    const admins = await this.prisma.user.count({
+      where: { role: 'ADMIN' },
     });
+    const clients = await this.prisma.user.count({
+      where: { role: 'CLIENT' },
+    });
+
+    return { total, admins, clients };
   }
 }

@@ -32,6 +32,7 @@ model User {
   avatar    String?
 
   orders    Order[]
+  refreshTokens RefreshToken[]
   otps      OTP[]
 
   createdAt DateTime @default(now())
@@ -53,6 +54,19 @@ model OTP {
   createdAt DateTime @default(now())
 
   @@map("otps")
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
 }
 
 model Category {

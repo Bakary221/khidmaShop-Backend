@@ -10,6 +10,7 @@ async function main() {
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.oTP.deleteMany();
+  await prisma.$executeRaw`DELETE FROM "refresh_tokens"`;
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
   await prisma.user.deleteMany();
@@ -123,7 +124,7 @@ async function main() {
           'Polo structuré, facile à porter, avec une silhouette propre.',
         sizes: ['S', 'M', 'L', 'XL'],
         colors: ['Blanc', 'Noir', 'Gris'],
-        featured: false,
+        featured: true,
         stock: 32,
         rating: 4.5,
         active: true,

@@ -1,4 +1,4 @@
-import { IsString, IsBoolean, IsOptional, IsUrl, MinLength } from 'class-validator';
+import { IsString, IsBoolean, IsOptional, MinLength } from 'class-validator';
 
 export class CreateCategoryDto {
   @IsString()
@@ -9,8 +9,8 @@ export class CreateCategoryDto {
   @IsOptional()
   slug?: string;
 
-  @IsUrl()
   @IsString()
+  @MinLength(1)
   image: string;
 
   @IsBoolean()
@@ -27,7 +27,7 @@ export class UpdateCategoryDto {
   @IsOptional()
   slug?: string;
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
   image?: string;
 

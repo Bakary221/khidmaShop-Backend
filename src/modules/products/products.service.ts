@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { CloudinaryService } from '@/common/services/cloudinary.service';
 import {
   CreateProductDto,
   UpdateProductDto,
@@ -12,7 +13,10 @@ const logger = getLogger('ProductsService');
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudinary: CloudinaryService,
+  ) {}
 
   async findAll(filters?: FilterProductsDto) {
     logger.log('Fetching products with filters', filters);
@@ -64,23 +68,42 @@ export class ProductsService {
     return product;
   }
 
-  async findFeatured() {
+  async findFeatured(limit = 4) {
     logger.log('Récupération des produits en vedette');
-    return this.prisma.product.findMany({
+
+    const featuredProducts = await this.prisma.product.findMany({
       where: { featured: true, active: true },
       include: { category: true },
       orderBy: { createdAt: 'desc' },
     });
+
+    if (featuredProducts.length >= limit) {
+      return featuredProducts.slice(0, limit);
+    }
+
+    const featuredIds = featuredProducts.map((product) => product.id);
+    const additionalProducts = await this.prisma.product.findMany({
+      where: {
+        active: true,
+        id: { notIn: featuredIds },
+      },
+      include: { category: true },
+      orderBy: { createdAt: 'desc' },
+      take: limit - featuredProducts.length,
+    });
+
+    return [...featuredProducts, ...additionalProducts];
   }
 
   async create(dto: CreateProductDto) {
     logger.log(`Creating product: ${dto.name}`);
+    const images = await this.uploadImages(dto.images);
     return this.prisma.product.create({
       data: {
         name: dto.name,
         slug: dto.slug || dto.name.toLowerCase().replace(/\s+/g, '-'),
         price: dto.price,
-        images: dto.images,
+        images,
         categoryId: dto.categoryId,
         brand: dto.brand,
         description: dto.description,
@@ -99,10 +122,13 @@ export class ProductsService {
     logger.log(`Updating product ${id}`);
     await this.findById(id); // Check if exists
 
+    const processedImages = dto.images ? await this.uploadImages(dto.images) : undefined;
+
     return this.prisma.product.update({
       where: { id },
       data: {
         ...dto,
+        ...(processedImages ? { images: processedImages } : {}),
         slug: dto.slug || (dto.name ? dto.name.toLowerCase().replace(/\s+/g, '-') : undefined),
       },
       include: { category: true },
@@ -139,7 +165,7 @@ export class ProductsService {
       where: { active: true },
     });
 
-    return brands.map((b) => b.brand);
+    return brands.map(({ brand }: { brand: string }) => brand);
   }
 
   async getStats() {
@@ -150,5 +176,14 @@ export class ProductsService {
     const categories = await this.prisma.category.count();
 
     return { total, featured, categories };
+  }
+
+  private async uploadImages(images?: string[]) {
+    const safeImages = images?.filter((url) => Boolean(url)) ?? [];
+    if (!safeImages.length) {
+      return [];
+    }
+
+    return this.cloudinary.uploadMany(safeImages);
   }
 }
