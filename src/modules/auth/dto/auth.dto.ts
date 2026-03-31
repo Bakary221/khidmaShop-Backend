@@ -1,13 +1,32 @@
-import { IsPhoneNumber, IsEnum, Length, IsEmail, IsString } from 'class-validator';
+import {
+  IsEnum,
+  IsString,
+  IsOptional,
+  Length,
+  Matches,
+  IsEmail,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 
 export class SendOtpDto {
   @ApiProperty({
-    description: 'Numéro de téléphone au format international',
+    description: 'Numéro de téléphone (avec le préfixe pays ou sans)',
     example: '+33700000001',
   })
-  @IsPhoneNumber(null, { message: 'Numéro de téléphone invalide' })
+  @Matches(/^\+?[0-9]{8,15}$/, {
+    message: 'Numéro de téléphone invalide',
+  })
   phone: string;
+
+  @ApiProperty({
+    description: 'Role associé à la demande',
+    example: 'CLIENT',
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
 }
 
 export class VerifyOtpDto {
@@ -15,7 +34,9 @@ export class VerifyOtpDto {
     description: 'Numéro de téléphone',
     example: '+33700000001',
   })
-  @IsPhoneNumber(null, { message: 'Numéro de téléphone invalide' })
+  @Matches(/^\+?[0-9]{8,15}$/, {
+    message: 'Numéro de téléphone invalide',
+  })
   phone: string;
 
   @ApiProperty({
@@ -25,6 +46,15 @@ export class VerifyOtpDto {
   @IsString()
   @Length(6, 6, { message: 'Le code OTP doit avoir 6 caractères' })
   otp: string;
+
+  @ApiProperty({
+    description: 'Role associé à la vérification',
+    example: 'CLIENT',
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
 }
 
 export class AdminLoginDto {
@@ -49,6 +79,7 @@ export class RefreshTokenDto {
     description: 'Jeton de rafraîchissement',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
+  @IsOptional()
   @IsString()
-  refreshToken: string;
+  refreshToken?: string;
 }

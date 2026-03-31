@@ -8,6 +8,11 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../../core/decorators/public.decorator';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import {
+  ACCESS_TOKEN_COOKIE,
+  getCookieValue,
+} from '../utils/cookies.util';
+import type { Request } from 'express';
 
 @Injectable()
 export class JwtGuard implements CanActivate {
@@ -26,8 +31,8 @@ export class JwtGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
-    const token = this.extractTokenFromHeader(request);
+    const request = context.switchToHttp().getRequest<Request>();
+    const token = this.extractToken(request);
 
     if (!token) {
       throw new UnauthorizedException('Token d\'authentification manquant');
@@ -44,8 +49,13 @@ export class JwtGuard implements CanActivate {
     }
   }
 
-  private extractTokenFromHeader(request: any): string | undefined {
-    const [type, token] = request.headers.authorization?.split(' ') ?? [];
-    return type === 'Bearer' ? token : undefined;
+  private extractToken(request: Request): string | undefined {
+    const [type, headerToken] = request.headers.authorization?.split(' ') ?? [];
+    if (type === 'Bearer' && headerToken) {
+      return headerToken;
+    }
+
+    const cookieToken = getCookieValue(request.headers.cookie, ACCESS_TOKEN_COOKIE);
+    return cookieToken ?? undefined;
   }
 }

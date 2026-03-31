@@ -50,24 +50,25 @@ export class AuthService {
   ) {}
 
   async sendOtp(dto: SendOtpDto): Promise<{ requestId: string }> {
-    logger.log(`Sending OTP to phone: ${dto.phone}`);
+    const normalizedPhone = this.normalizePhone(dto.phone);
+    logger.log(`Sending OTP to phone: ${normalizedPhone}`);
 
     const otp = this.generateOtp();
     const expiresAt = new Date(Date.now() + this.otpExpiration);
 
     try {
       let user = await this.prisma.user.findUnique({
-        where: { phone: dto.phone },
+        where: { phone: normalizedPhone },
       });
 
       if (!user) {
         user = await this.prisma.user.create({
-          data: {
-            phone: dto.phone,
-            name: `User ${dto.phone}`,
-            role: 'CLIENT',
-          },
-        });
+        data: {
+          phone: normalizedPhone,
+          name: `User ${dto.phone}`,
+          role: 'CLIENT',
+        },
+      });
         logger.log(`Utilisateur créé: ${user.id}`);
       }
 
@@ -81,7 +82,7 @@ export class AuthService {
         },
       });
 
-      await this.smsService.sendSms(dto.phone, `Votre code OTP est: ${otp}`);
+      await this.smsService.sendSms(normalizedPhone, `Votre code OTP est: ${otp}`);
 
       logger.log(`Code OTP envoyé avec succès à ${dto.phone}`);
 
@@ -99,8 +100,9 @@ export class AuthService {
     logger.log(`Verifying OTP for phone: ${dto.phone}`);
 
     try {
+      const normalizedPhone = this.normalizePhone(dto.phone);
       let user = await this.prisma.user.findUnique({
-        where: { phone: dto.phone },
+        where: { phone: normalizedPhone },
       });
 
       if (!user) {
@@ -283,5 +285,16 @@ export class AuthService {
     return Math.floor(Math.random() * Math.pow(10, length))
       .toString()
       .padStart(length, '0');
+  }
+
+  private normalizePhone(phone: string): string {
+    const digits = phone.replace(/[^\d]/g, '');
+    if (!digits) {
+      return phone;
+    }
+    if (phone.trim().startsWith('+')) {
+      return `+${digits}`;
+    }
+    return `+${digits}`;
   }
 }

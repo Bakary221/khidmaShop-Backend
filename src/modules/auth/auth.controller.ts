@@ -21,48 +21,58 @@ import {
 import { Public } from '@/core/decorators/public.decorator';
 import { JwtGuard } from '@/common/guards/jwt.guard';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  ROLE_COOKIE,
+  getCookieValue,
+} from '@/common/utils/cookies.util';
 
-const REFRESH_TOKEN_COOKIE = 'refresh_token';
-const ROLE_COOKIE = 'khidma_role';
-const COOKIE_MAX_AGE = parseInt(process.env.JWT_REFRESH_EXPIRATION || '1296000', 10) * 1000;
-const COOKIE_OPTIONS = {
+const accessTokenMaxAge = parseInt(process.env.JWT_EXPIRATION || '900', 10);
+const refreshTokenMaxAge = parseInt(process.env.JWT_REFRESH_EXPIRATION || '1296000', 10);
+
+const envSameSite = (process.env.JWT_COOKIE_SAMESITE as 'lax' | 'strict' | 'none') ?? 'none';
+const forceSecure = (() => {
+  if (process.env.JWT_COOKIE_SECURE) {
+    return process.env.JWT_COOKIE_SECURE === 'true';
+  }
+  return process.env.NODE_ENV === 'production';
+})();
+
+const baseCookieOptions = (maxAgeSeconds: number) => ({
   httpOnly: true,
   path: '/',
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
-  maxAge: COOKIE_MAX_AGE,
-};
+  sameSite: forceSecure ? envSameSite : 'lax',
+  secure: forceSecure,
+  maxAge: maxAgeSeconds * 1000,
+});
 
-function getCookieValue(request: Request, name: string): string | null {
-  const cookieHeader = request.headers.cookie;
-  if (!cookieHeader) return null;
-  const cookies = cookieHeader.split(';').map((part) => part.trim());
-  const match = cookies.find((cookie) => cookie.startsWith(`${name}=`));
-  if (!match) return null;
-  return decodeURIComponent(match.split('=')[1]);
+const ACCESS_TOKEN_COOKIE_OPTIONS = baseCookieOptions(accessTokenMaxAge);
+const REFRESH_TOKEN_COOKIE_OPTIONS = baseCookieOptions(refreshTokenMaxAge);
+
+function optionalCookie<T extends object>(options: T) {
+  return {
+    ...options,
+    maxAge: 0,
+    expires: new Date(0),
+  };
 }
 
 function extractRefreshToken(request: Request, body?: RefreshTokenDto) {
   if (body?.refreshToken) return body.refreshToken;
-  return getCookieValue(request, REFRESH_TOKEN_COOKIE);
+  return getCookieValue(request.headers.cookie, REFRESH_TOKEN_COOKIE);
 }
 
-function attachAuthCookies(res: Response, refreshToken: string, role: string) {
-  res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, COOKIE_OPTIONS);
-  res.cookie(ROLE_COOKIE, role, COOKIE_OPTIONS);
+function attachAuthCookies(res: Response, accessToken: string, refreshToken: string, role: string) {
+  res.cookie(ACCESS_TOKEN_COOKIE, accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
+  res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, REFRESH_TOKEN_COOKIE_OPTIONS);
+  res.cookie(ROLE_COOKIE, role, REFRESH_TOKEN_COOKIE_OPTIONS);
 }
 
 function clearAuthCookies(res: Response) {
-  res.cookie(REFRESH_TOKEN_COOKIE, '', {
-    ...COOKIE_OPTIONS,
-    maxAge: 0,
-    expires: new Date(0),
-  });
-  res.cookie(ROLE_COOKIE, '', {
-    ...COOKIE_OPTIONS,
-    maxAge: 0,
-    expires: new Date(0),
-  });
+  res.cookie(ACCESS_TOKEN_COOKIE, '', optionalCookie(ACCESS_TOKEN_COOKIE_OPTIONS));
+  res.cookie(REFRESH_TOKEN_COOKIE, '', optionalCookie(REFRESH_TOKEN_COOKIE_OPTIONS));
+  res.cookie(ROLE_COOKIE, '', optionalCookie(REFRESH_TOKEN_COOKIE_OPTIONS));
 }
 
 @ApiTags('Auth')
@@ -92,7 +102,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const tokens = await this.authService.verifyOtp(dto);
-    attachAuthCookies(res, tokens.refreshToken, tokens.role);
+    attachAuthCookies(res, tokens.accessToken, tokens.refreshToken, tokens.role);
     return {
       accessToken: tokens.accessToken,
       role: tokens.role,
@@ -112,7 +122,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const tokens = await this.authService.adminLogin(dto);
-    attachAuthCookies(res, tokens.refreshToken, tokens.role);
+    attachAuthCookies(res, tokens.accessToken, tokens.refreshToken, tokens.role);
     return {
       accessToken: tokens.accessToken,
       role: tokens.role,
@@ -134,7 +144,7 @@ export class AuthController {
     }
 
     const tokens = await this.authService.refreshToken(refreshToken);
-    attachAuthCookies(res, tokens.refreshToken, tokens.role);
+    attachAuthCookies(res, tokens.accessToken, tokens.refreshToken, tokens.role);
     return {
       accessToken: tokens.accessToken,
       role: tokens.role,
