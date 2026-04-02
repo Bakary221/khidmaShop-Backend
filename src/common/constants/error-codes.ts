@@ -11,6 +11,7 @@ export enum ErrorCode {
   USER_NOT_FOUND = 'USER_NOT_FOUND',
   USER_ALREADY_EXISTS = 'USER_ALREADY_EXISTS',
   USER_INVALID_PHONE = 'USER_INVALID_PHONE',
+  USER_PROFILE_INCOMPLETE = 'USER_PROFILE_INCOMPLETE',
 
   // Product errors
   PRODUCT_NOT_FOUND = 'PRODUCT_NOT_FOUND',
@@ -45,6 +46,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   [ErrorCode.USER_NOT_FOUND]: 'Utilisateur non trouvé',
   [ErrorCode.USER_ALREADY_EXISTS]: 'Utilisateur existe déjà',
   [ErrorCode.USER_INVALID_PHONE]: 'Numéro de téléphone invalide',
+  [ErrorCode.USER_PROFILE_INCOMPLETE]: 'Profil utilisateur incomplet',
 
   [ErrorCode.PRODUCT_NOT_FOUND]: 'Produit non trouvé',
   [ErrorCode.PRODUCT_OUT_OF_STOCK]: 'Le produit est en rupture de stock',

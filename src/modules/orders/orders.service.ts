@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { User } from '@prisma/client';
 import { PrismaService } from '@/common/services/prisma.service';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import {
@@ -63,14 +64,72 @@ export class OrdersService {
     return order;
   }
 
-  async create(dto: CreateOrderDto, userId: string) {
-    logger.log(`Creating order for user ${userId}`);
+  private isProfileIncomplete(user: User) {
+    const trimmedName = user.name?.trim() ?? '';
+    const trimmedAddress = user.address?.trim() ?? '';
+
+    if (!trimmedName || !trimmedAddress) {
+      return true;
+    }
+
+    const normalizedName = trimmedName.toLowerCase();
+    if (normalizedName.startsWith('user ')) {
+      return true;
+    }
+
+    const normalizedPhone = user.phone?.trim().toLowerCase() ?? '';
+    if (normalizedName === normalizedPhone) {
+      return true;
+    }
+
+    return false;
+  }
+
+  async create(dto: CreateOrderDto, user: JwtPayload) {
+    logger.log(`Creating order for user ${user.sub}`);
+
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.sub },
+    });
+
+    if (!dbUser) {
+      throw new NotFoundException('User');
+    }
 
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException(
         ErrorCode.ORDER_EMPTY,
         'Order must have at least one item',
       );
+    }
+
+    const customerName = dto.customerName.trim();
+    const customerAddress = dto.address?.trim();
+
+    if (!customerName) {
+      throw new BadRequestException(
+        ErrorCode.INVALID_INPUT,
+        'Le nom du client est requis',
+      );
+    }
+
+    const requiresProfileUpdate = this.isProfileIncomplete(dbUser);
+
+    if (requiresProfileUpdate) {
+      if (!customerAddress) {
+        throw new BadRequestException(
+          ErrorCode.USER_PROFILE_INCOMPLETE,
+          'Adresse requise pour finaliser la première commande',
+        );
+      }
+
+      await this.prisma.user.update({
+        where: { id: user.sub },
+        data: {
+          name: customerName,
+          address: customerAddress,
+        },
+      });
     }
 
     // Fetch all products to validate stock and calculate total
@@ -95,13 +154,15 @@ export class OrdersService {
       total += product.price * item.quantity;
     }
 
+    const orderAddress = customerAddress ?? undefined;
+
     // Create order with items
     const order = await this.prisma.order.create({
       data: {
-        userId,
-        customerName: dto.customerName,
+        userId: user.sub,
+        customerName,
         phone: dto.phone,
-        address: dto.address,
+        address: orderAddress,
         latitude: dto.latitude,
         longitude: dto.longitude,
         total,

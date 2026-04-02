@@ -1,473 +1,133 @@
 # 🚀 KhidmaShop Backend API
 
-Backend robuste et scalable pour la plateforme de e-commerce KhidmaShop, construit avec **NestJS**, **Prisma** et **PostgreSQL**.
+Backend scalable pour la marketplace KhidmaShop : NestJS (App Router), Prisma et PostgreSQL orchestrent l'authentification OTP, la gestion complète du catalogue et des commandes, ainsi qu'une couche d'administration sécurisée.
 
-## 📋 Table des Matières
+## 📦 Stack technique
+- **NestJS 10+** (Modular architecture, Guards, Interceptors, Pipes)
+- **Prisma 5+** sur PostgreSQL 16 (migrations, seeding, schéma typé)
+- **JWT** (access + refresh, tokens en cookies HttpOnly, SameSite configurable)
+- **Vonage (OTP)** avec fallback simulation dans `SmsService`
+- **Cloudinary** pour centraliser les images produits/catégories
+- **Logger Winston** configuré via `LOG_LEVEL`
+- **Swagger / OpenAPI** accessible sur `/api/docs`
 
-- [Features](#-features)
-- [Stack Technique](#-stack-technique)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-- [Lancement](#-lancement)
-- [API Documentation](#-api-documentation)
-- [Architecture](#-architecture)
+## ✨ Principales capacités
+1. **Authentification hybride**
+   - Clients : `POST /auth/send-otp` → envoie OTP à un numéro validé via regex internationale.
+   - Vérification : `POST /auth/verify-otp` stocke le user, génère access + refresh tokens, les greffe dans des cookies sécurisés.
+   - Admins : `POST /auth/admin-login` avec email + mot de passe bcryptisé ; il existe aussi `POST /auth/logout` et `POST /auth/refresh`.
+2. **Catalogue & produits**
+   - CRUD complet (création, update, suppression, toggle active) avec restrictions `@Roles('ADMIN')`.
+   - Filtrage public (`search`, `brand`, `categoryId`, `maxPrice`), routes `GET /products`, `GET /products/featured`, `GET /products/brands`, `GET /products/:id`, `GET /products/stats`.
+   - Images téléversées vers Cloudinary (ou conservées en base si `SKIP_CLOUDINARY_UPLOAD=true`).
+3. **Catégories**
+   - `GET /categories`, `GET /categories/:id` (option `includeInactive`).
+   - Admin : création, mise à jour, toggle `active`, suppression protégée (vérifie qu'aucun produit n'y est lié).
+4. **Commandes & workflow client/admin**
+   - `POST /orders` : valide les profils, vérifie le stock, saisit latitude/longitude, calcule les totaux et prend des snapshots produits.
+   - `GET /orders` (les clients n'ont que les leurs, les admins voient toutes les commandes), `GET /orders/:id`, `PATCH /orders/:id/status`, `GET /orders/stats`.
+   - L'ordre se base sur un enum `OrderStatus` (`PENDING`, `CONFIRMED`, `DELIVERED`).
+5. **Utilisateurs**
+   - Profil, CRUD, statistiques (`/users/stats`), et endpoint `GET /users/me` qui respecte la guard JWT.
+6. **Sécurité & infrastructure**
+   - Guard global `JwtGuard` appliqué via `APP_GUARD`, décorateurs `@Public()` + `@Roles('ADMIN')` pour exposer/fermer les routes.
+   - Token refresh avec stockage sha256 (service `RefreshTokenService`), cookies `khidma_access_token`, `refresh_token`, `khidma_role`.
+   - Interceptor global `ResponseInterceptor` + filter `HttpExceptionFilter` garantissant un format `{
+       success, message, data, error
+     }`.
 
----
+## 🧱 Structure importante
+```
+src/
+├── modules/         # auth, users, products, categories, orders, sms
+├── common/          # guards, services (Prisma, Cloudinary, refresh token), utils
+├── core/            # décorateurs publics, interceptors, filtres, exceptions
+├── prisma/          # schema.prisma + seed.ts
+└── main.ts          # bootstrap (validation, body-parser 5MB, Swagger, CORS)
+```
 
-## ✨ Features
-
-- ✅ **Authentification Hybride**
-  - Clients: OTP via SMS (Vonage/Nexmo)
-  - Admins: Email + Password (bcrypt)
-  - JWT tokens (Access + Refresh)
-
-- ✅ **Gestion Complète E-Commerce**
-  - Produits CRUD avec filtres avancés
-  - Catégories avec images
-  - Commandes avec snapshots historiques
-  - Utilisateurs et profils
-
-- ✅ **Sécurité Robuste**
-  - JWT Guards avec RBAC (Role-Based Access Control)
-  - Password hashing (bcrypt)
-  - CORS configurable
-  - Rate limiting sur endpoints sensibles
-  - Helmet pour security headers
-
-- ✅ **Developer Experience**
-  - Swagger/OpenAPI documentation complète
-  - Seeding automatique
-  - Migrations Prisma
-  - Logger Winston structuré
-  - ValidationPipe global avec DTOs
-
----
-
-## 🛠️ Stack Technique
-
-| Composant | Technology |
-|-----------|-----------|
-| **Framework** | NestJS 10+ |
-| **Base de données** | PostgreSQL 16 |
-| **ORM** | Prisma 5+ |
-| **Authentication** | JWT + Passport |
-| **Validation** | class-validator + class-transformer |
-| **SMS** | Vonage/Nexmo API |
-| **Documentation** | Swagger/OpenAPI |
-| **Logging** | Winston |
-| **Security** | bcrypt + Helmet |
-
----
-
-## 📦 Installation
-
-### Prérequis
+## ⚙️ Prérequis & configuration
 - Node.js 18+
-- PostgreSQL 14+ (local ou Docker)
-- npm ou pnpm
+- PostgreSQL 16 (local ou via Docker)
+- npm
 
-### 1. Clone et Installation
-
+### 1. Démarrer la base
 ```bash
-cd KhidmaShop-backend
+# Option recommandée : reproduire l'environnement PostgreSQL
+docker-compose up -d postgres
+```
+ou bien créer manuellement la base (`createdb khidmashop`).
+
+### 2. Installer les dépendances
+```bash
 npm install
 ```
 
-### 2. Configuration PostgreSQL
+### 3. Variables d'environnement
+Copier `.env` (fourni) et ajuster :
 
-#### Option A: Docker (Recommandé)
+| Clé | Usage | Note |
+|---|---|---|
+| `DATABASE_URL` | Connexion PostgreSQL | `postgresql://user:pass@host:5432/khidmashop?schema=public`
+| `JWT_SECRET` / `JWT_REFRESH_SECRET` | Signatures (>=32 caractères) | 
+| `JWT_EXPIRATION`, `JWT_REFRESH_EXPIRATION` | Durées en secondes (900 / 1 296 000 par défaut) |
+| `JWT_COOKIE_SAMESITE`, `JWT_COOKIE_SECURE` | SameSite/secure des cookies (optionnel) |
+| `CORS_ORIGIN` | Origine frontend (ex: `http://localhost:3000`) |
+| `CLOUDINARY_*` | ApiKey + dossier ; `SKIP_CLOUDINARY_UPLOAD=true` pour tests locaux |
+| `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM` | En production, mettre les identifiants Vonage | défauts `test-*` déclenchent `sendMockSms` |
+| `OTP_EXPIRATION_MINUTES`, `OTP_LENGTH` | TTL, longueur OTP |
+| `LOG_LEVEL` | `debug`, `info`, etc. |
 
+> **Astuce** : sans Vonage valide, `SmsService` simule l'envoi et affiche dans la console les codes OTP générés.
+
+### 4. Prisma
 ```bash
-docker-compose up -d postgres
-```
-
-Cela lance PostgreSQL sur `localhost:5432`
-
-#### Option B: PostgreSQL Local
-
-```bash
-createdb khidmashop
-```
-
-### 3. Variables d'Environnement
-
-```bash
-cp .env.example .env
-```
-
-Editez `.env` avec vos credentials:
-
-```env
-DATABASE_URL=postgresql://db_user:db_password@localhost:5432/khidmashop?schema=public
-JWT_SECRET=your-secret-key-min-32-chars
-VONAGE_API_KEY=your-vonage-key
-VONAGE_API_SECRET=your-vonage-secret
-CORS_ORIGIN=http://localhost:3000
-```
-
-### 4. Setup Prisma
-
-```bash
-# Générer Prisma Client
 npm run prisma:generate
-
-# Créer les tables (run migrations)
-npm run prisma:migrate
-
-# Seeder les données de démo
-npm run prisma:seed
+npm run prisma:migrate # ou `migrate dev`
+npm run prisma:seed  # réinitialise / crée jeux de données (admin + clients)
 ```
+> Les seeds créent des catégories, produits, deux commandes exemples, un admin `admin@khidma.shop / khidma123` et un client `0700000001`.
 
----
-
-## 🚀 Lancement
-
-### Version Développement (watch mode)
-
+### 5. Lancer
 ```bash
-npm run start:dev
-```
-
-Server démarre sur: http://localhost:3001
-
-### Version Production
-
-```bash
+npm run start:dev       # watch-mode (~localhost:3001)
 npm run build
 npm run start:prod
 ```
 
----
-
-## 📘 API Documentation
-
-### Swagger/OpenAPI
-
-Une fois le serveur démarré, accedez à:
-
-```
-http://localhost:3001/api/docs
-```
-
-### Routes Principales
-
-#### 🔐 Authentication
-```
-POST   /auth/send-otp              Send OTP to phone
-POST   /auth/verify-otp            Verify OTP and get tokens
-POST   /auth/admin-login           Admin login (email + password)
-POST   /auth/refresh               Refresh access token
-```
-
-#### 📦 Products
-```
-GET    /products                   List products with filters
-GET    /products/featured          Get featured products only
-GET    /products/:id               Get product details
-GET    /products/brands            Get all brands
-POST   /products                   Create product (admin)
-PUT    /products/:id               Update product (admin)
-PATCH  /products/:id/toggle        Toggle active status (admin)
-DELETE /products/:id               Delete product (admin)
-```
-
-#### 🏷️ Categories
-```
-GET    /categories                 List categories
-GET    /categories/:id             Get category details
-POST   /categories                 Create category (admin)
-PUT    /categories/:id             Update category (admin)
-PATCH  /categories/:id/toggle      Toggle active (admin)
-DELETE /categories/:id             Delete category (admin)
-```
-
-#### 🛒 Orders
-```
-GET    /orders                     List orders (own for clients, all for admin)
-GET    /orders/:id                 Get order details
-POST   /orders                     Create order (clients)
-PATCH  /orders/:id/status          Update status (admin)
-```
-
-#### 👤 Users
-```
-GET    /users                      List users (admin)
-GET    /users/:id                  Get user details
-PUT    /users/:id                  Update user profile
-```
-
----
-
-## 🏗️ Architecture
-
-### Structure Répertoires
-
-```
-src/
-├── core/                          # Logique métier & infrastructure
-│   ├── exceptions/
-│   │   └── custom.exceptions.ts
-│   ├── filters/
-│   │   └── http-exception.filter.ts
-│   ├── interceptors/
-│   │   └── response.interceptor.ts
-│   └── decorators/
-│       └── public.decorator.ts
-│
-├── common/                        # Éléments partagés
-│   ├── decorators/
-│   │   ├── auth.decorator.ts
-│   │   ├── roles.decorator.ts
-│   │   └── current-user.decorator.ts
-│   ├── guards/
-│   │   ├── jwt.guard.ts
-│   │   ├── roles.guard.ts
-│   │   └── optional-jwt.guard.ts
-│   ├── constants/
-│   │   ├── error-codes.ts
-│   │   └── messages.ts
-│   ├── dto/
-│   │   └── response.dto.ts
-│   └── utils/
-│       ├── logger.ts
-│       └── validators.ts
-│
-├── config/                        # Configuration app
-│   ├── database.config.ts
-│   ├── jwt.config.ts
-│   ├── sms.config.ts
-│   └── cors.config.ts
-│
-├── modules/
-│   ├── auth/                      # Module Authentification
-│   │   ├── auth.module.ts
-│   │   ├── auth.controller.ts
-│   │   ├── auth.service.ts
-│   │   ├── strategies/
-│   │   │   └── jwt.strategy.ts
-│   │   ├── dto/
-│   │   │   ├── send-otp.dto.ts
-│   │   │   ├── verify-otp.dto.ts
-│   │   │   └── admin-login.dto.ts
-│   │   └── interfaces/
-│   │       └── jwt-payload.interface.ts
-│   │
-│   ├── sms/                       # Service SMS
-│   │   ├── sms.module.ts
-│   │   └── sms.service.ts
-│   │
-│   ├── users/                     # Module Utilisateurs
-│   │   ├── users.module.ts
-│   │   ├── users.controller.ts
-│   │   ├── users.service.ts
-│   │   └── dto/
-│   │       ├── create-user.dto.ts
-│   │       └── update-user.dto.ts
-│   │
-│   ├── products/                  # Module Produits
-│   │   ├── products.module.ts
-│   │   ├── products.controller.ts
-│   │   ├── products.service.ts
-│   │   └── dto/
-│   │       ├── create-product.dto.ts
-│   │       ├── update-product.dto.ts
-│   │       └── filter-products.dto.ts
-│   │
-│   ├── categories/                # Module Catégories
-│   │   ├── categories.module.ts
-│   │   ├── categories.controller.ts
-│   │   ├── categories.service.ts
-│   │   └── dto/
-│   │       ├── create-category.dto.ts
-│   │       └── update-category.dto.ts
-│   │
-│   └── orders/                    # Module Commandes
-│       ├── orders.module.ts
-│       ├── orders.controller.ts
-│       ├── orders.service.ts
-│       └── dto/
-│           ├── create-order.dto.ts
-│           └── update-order-status.dto.ts
-│
-├── prisma/
-│   └── schema.prisma              # Schéma DB
-│
-└── main.ts                        # Entry point
-```
-
----
-
-## 🔐 Authentification & Sécurité
-
-### Flow Auth Client (OTP)
-
-1. Client envoie phone → `POST /auth/send-otp`
-2. Backend génère OTP (6 chiffres)
-3. SMS envoyé via Vonage
-4. Client saisit OTP → `POST /auth/verify-otp`
-5. ✅ Retour: `{ accessToken, refreshToken }`
-6. User auto-créé en DB si 1ère connexion
-
-### Flow Auth Admin (Email + Password)
-
-1. Admin saisit email + password → `POST /auth/admin-login`
-2. Password vérifié contra DB (bcrypt)
-3. ✅ Retour: `{ accessToken, refreshToken }`
-
-### Token Management
-
-- **Access Token** : 15 minutes (JWT)
-- **Refresh Token** : 7 jours (JWT)
-- Endpoint `/auth/refresh` pour renouveler access token
-
-### Guards & RBAC
-
-```typescript
-// Protéger une route
-@UseGuards(JwtGuard)
-@Post('/sensitive')
-async sensitiveAction() { }
-
-// Admin only
-@UseGuards(JwtGuard, RolesGuard)
-@Roles('ADMIN')
-@Post('/admin-only')
-async adminAction() { }
-
-// Public (pas de guard)
-@Public()
-@Get('/products')
-async getPublicProducts() { }
-```
-
----
-
-## 🗄️ Base de Données
-
-### Schéma Prisma
-
-Le fichier `prisma/schema.prisma` contient:
-
-- **User** : Clients + Admins avec roles
-- **OTP** : Codes OTP avec expiration
-- **Category** : Catégories avec image
-- **Product** : Produits avec variantes (sizes, colors)
-- **Order** : Commandes avec snapshots items
-- **OrderItem** : Items de commande avec snapshot produit
-
-### Relations
-
-```
-User (1) ──── (Many) Order
-        └──── (Many) OTP
-
-Category (1) ──── (Many) Product
-
-Product (1) ──── (Many) OrderItem
-
-Order (1) ──── (Many) OrderItem
-```
-
----
-
-## 📊 Response Format Standard
-
-### Success Response
-
-```json
-{
-  "success": true,
-  "message": "Products retrieved successfully",
-  "data": [...],
-  "error": null
-}
-```
-
-### Error Response
-
-```json
-{
-  "success": false,
-  "message": "Invalid OTP",
-  "data": null,
-  "error": {
-    "code": "AUTH_OTP_INVALID",
-    "details": "Code OTP has expired"
-  }
-}
-```
-
----
-
-## 🧪 Testing
-
-```bash
-# Unit tests
-npm run test
-
-# Watch mode
-npm run test:watch
-
-# Coverage
-npm run test:cov
-
-# E2E tests
-npm run test:e2e
-```
-
----
-
-## 🛠️ Admin Commands
-
-```bash
-# Reset databse (WARNING: destructive!)
-npm run prisma:reset
-
-# Interactive Prisma Studio
-npm run prisma:studio
-
-# View database migrations
-npm run prisma:migrate -- --dry-run
-```
-
----
-
-## 🚀 Déploiement
-
-### Environment Production
-
-```env
-NODE_ENV=production
-DATABASE_URL=postgresql://user:pass@prod-host:5432/khidmashop
-JWT_SECRET=your-long-random-secret-32+ chars
-VONAGE_API_KEY=production-key
-VONAGE_API_SECRET=production-secret
-CORS_ORIGIN=https://khidmashop.com
-```
-
-### Build & Deploy
-
-```bash
-npm run build
-npm run prisma:migrate:deploy
-npm run start:prod
-```
-
----
-
-## 📞 Support & Documentation
-
-- API Docs: http://localhost:3001/api/docs
-- Prisma Docs: https://www.prisma.io/docs/
-- NestJS Docs: https://docs.nestjs.com/
-- Vonage Docs: https://developer.vonage.com/
-
----
-
-## 📄 License
-
-UNLICENSED - Private Project
-
----
-
-**Créé avec ❤️ par le team KhidmaShop** 🚀
+## 🧪 Scripts utiles
+- `npm run lint`
+- `npm run test` / `test:watch` / `test:cov` (Jest est configuré mais aucun spec n'est livré) → créer vos suites.
+- `npm run prisma:studio`
+- `npm run prisma:reset` (⚠️ destructif)
+
+## 📚 Documentation & aides
+- API : `http://localhost:3001/api/docs`
+- Schéma Prisma expliqué dans `prisma/schema.prisma` et `DATABASE_SCHEMA.md`
+- Flow OTP / SMS : `SMS_CONFIGURATION.md`
+- Quickstart & implémentations détaillées : `QUICKSTART.md`, `IMPLEMENTATION_COMPLETE.md`.
+
+## 🚪 Points d'intégration
+- **Front Next.js** : consomme les cookies JWT (`khidma_access_token`, `refresh_token`) grâce à `credentials: 'include'`.
+- **CloudinaryService** : upload des `data:` URIs ; en cas d'échec, la valeur initiale est renvoyée.
+- **Refresh tokens** : stockés hashés, invalidés lors du logout ou du refresh.
+
+## 🚀 Production checklist
+1. Mettre `NODE_ENV=production`, `JWT_COOKIE_SECURE=true`, définir `CORS_ORIGIN` exact.
+2. Utiliser `npm run prisma:migrate:deploy` au lieu de `migrate dev`.
+3. Fournir des clés Vonage / Cloudinary réelles (ou `SKIP_CLOUDINARY_UPLOAD=true`).
+4. Ajouter une stratégie de monitoring (logs centralisés) et des tests automatisés (Jest est prêt à être utilisé).
+5. Prévoir un reverse proxy/Load Balancer pour injecter les cookies avec TLS.
+
+## 👮‍♂️ Sécurité & format de réponses
+- EVT `CustomException` renvoie `success: false` + `error: { code, details }`.
+- `JwtGuard` se branche sur chaque requête (sauf `@Public()`), `RolesGuard` protège les endpoints administrateurs.
+- `ValidationPipe` global avec `whitelist` + `forbidNonWhitelisted` + `enableImplicitConversion`.
+- `bodyParser` accepté jusqu’à 5 Mo pour les uploads via Cloudinary.
+
+## ⚠️ Limitations connues
+- Aucune file de travaux (queues) : les uploads images se font synchrone et peuvent échouer sans gestion lourde.
+- Pas de rate limiting intégré (à ajouter en cas de forte charge/abuse).
+- Les tests Jest sont déclarés mais il faut créer des specs.
+
+**Bonne exploration !**

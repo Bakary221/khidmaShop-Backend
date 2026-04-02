@@ -51,9 +51,9 @@ export class OrdersController {
   @ApiOperation({ summary: 'Create new order (clients)' })
   async create(
     @Body() dto: CreateOrderDto,
-    @CurrentUser('sub') userId: string,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.ordersService.create(dto, userId);
+    return this.ordersService.create(dto, user);
   }
 
   @Patch(':id/status')
