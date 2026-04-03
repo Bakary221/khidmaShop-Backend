@@ -51,6 +51,6 @@ export class CreateOrderDto {
 }
 
 export class UpdateOrderStatusDto {
-  @IsEnum(['PENDING', 'CONFIRMED', 'DELIVERED'])
+  @IsEnum(['PENDING', 'CONFIRMED', 'DELIVERED', 'CANCELLED'])
   status: string;
 }

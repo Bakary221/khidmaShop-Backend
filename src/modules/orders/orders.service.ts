@@ -201,6 +201,39 @@ export class OrdersService {
     return order;
   }
 
+  async cancelOrder(id: string, user: JwtPayload) {
+    logger.log(`Cancelling order ${id} by user ${user.sub}`);
+
+    const order = await this.findById(id, user);
+
+    if (order.status !== 'PENDING') {
+      throw new BadRequestException(
+        ErrorCode.ORDER_CANNOT_CANCEL,
+        'Seules les commandes en attente peuvent être annulées',
+      );
+    }
+
+    const CANCEL_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+    const elapsed = Date.now() - new Date(order.createdAt).getTime();
+
+    if (elapsed > CANCEL_WINDOW_MS) {
+      throw new BadRequestException(
+        ErrorCode.ORDER_CANCEL_WINDOW_EXPIRED,
+        'Le délai d\'annulation de 30 minutes est dépassé',
+      );
+    }
+
+    return this.prisma.order.update({
+      where: { id },
+      data: { status: 'CANCELLED' },
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+    });
+  }
+
   async updateStatus(id: string, dto: UpdateOrderStatusDto) {
     logger.log(`Updating order ${id} status to ${dto.status}`);
     await this.findById(id); // Check if exists

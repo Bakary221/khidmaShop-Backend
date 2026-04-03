@@ -27,6 +27,8 @@ export enum ErrorCode {
   ORDER_NOT_FOUND = 'ORDER_NOT_FOUND',
   ORDER_EMPTY = 'ORDER_EMPTY',
   ORDER_INVALID_STATUS = 'ORDER_INVALID_STATUS',
+  ORDER_CANCEL_WINDOW_EXPIRED = 'ORDER_CANCEL_WINDOW_EXPIRED',
+  ORDER_CANNOT_CANCEL = 'ORDER_CANNOT_CANCEL',
 
   // Generic errors
   INVALID_INPUT = 'INVALID_INPUT',
@@ -59,6 +61,8 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   [ErrorCode.ORDER_NOT_FOUND]: 'Commande non trouvée',
   [ErrorCode.ORDER_EMPTY]: 'La commande ne peut pas être vide',
   [ErrorCode.ORDER_INVALID_STATUS]: 'Statut de commande invalide',
+  [ErrorCode.ORDER_CANCEL_WINDOW_EXPIRED]: 'Le délai d\'annulation de 30 minutes est dépassé',
+  [ErrorCode.ORDER_CANNOT_CANCEL]: 'Cette commande ne peut plus être annulée',
 
   [ErrorCode.INVALID_INPUT]: 'Entrée invalide',
   [ErrorCode.DATABASE_ERROR]: 'Erreur de base de données',

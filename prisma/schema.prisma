@@ -19,6 +19,7 @@ enum OrderStatus {
   PENDING
   CONFIRMED
   DELIVERED
+  CANCELLED
 }
 
 model User {

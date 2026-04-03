@@ -56,6 +56,15 @@ export class OrdersController {
     return this.ordersService.create(dto, user);
   }
 
+  @Patch(':id/cancel')
+  @ApiOperation({ summary: 'Cancel own order within 30 minutes (clients only)' })
+  async cancelOrder(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.ordersService.cancelOrder(id, user);
+  }
+
   @Patch(':id/status')
   @UseGuards(RolesGuard)
   @Roles('ADMIN')
