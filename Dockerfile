@@ -1,21 +1,32 @@
+# =========================
+# 1. Builder stage
+# =========================
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-RUN npm ci --only=production=false --no-optional --include=dev
+# ✅ Installer OpenSSL (OBLIGATOIRE pour Prisma)
+RUN apk add --no-cache openssl
 
-# Copy source
+# Copier les fichiers package
+COPY package*.json ./
+
+# Installer toutes les dépendances (y compris dev)
+RUN npm ci
+
+# Copier le code source
 COPY . .
 
-# Prisma generate
+# Générer Prisma Client
 RUN npx prisma generate
 
-# Build
+# Build de l'application (ex: TypeScript → dist/)
 RUN npm run build
 
-# Production stage
+
+# =========================
+# 2. Runner (production)
+# =========================
 FROM node:20-alpine AS runner
 
 WORKDIR /app
@@ -23,15 +34,20 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Copy built app
+# ✅ Installer OpenSSL (OBLIGATOIRE aussi ici)
+RUN apk add --no-cache openssl
+
+# Copier uniquement ce qui est nécessaire
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 
-# Prisma produce client
-RUN npx prisma generate --no-engine
+# ✅ IMPORTANT : Générer Prisma AVEC engine
+RUN npx prisma generate
 
+# Exposer le port
 EXPOSE 3001
 
+# Lancer migration + app
 CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
