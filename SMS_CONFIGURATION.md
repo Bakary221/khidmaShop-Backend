@@ -1,4 +1,4 @@
-# Configuration du Service SMS - KhidmaShop
+# Configuration du Service SMS - KhidmaShop (Twilio)
 
 ## 📱 Présentation
 
@@ -6,13 +6,13 @@ Le service SMS de KhidmaShop permet d'envoyer des codes OTP (One-Time Password) 
 
 ## 🔧 Variables d'Environnement
 
-Voici les variables requises dans le fichier `.env` pour configurer le service SMS :
+Voici les variables requises dans le fichier `.env` pour configurer le service SMS avec Twilio :
 
 ```env
-# SMS Configuration (Vonage)
-VONAGE_API_KEY=your-vonage-api-key
-VONAGE_API_SECRET=your-vonage-api-secret
-VONAGE_FROM=KhidmaShop
+# SMS Configuration (Twilio)
+TWILIO_ACCOUNT_SID=your-twilio-account-sid
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
+TWILIO_FROM_PHONE=+1234567890
 OTP_EXPIRATION_MINUTES=5
 OTP_LENGTH=6
 ```
@@ -29,32 +29,24 @@ OTP_LENGTH=6
 
 ## 🚀 Comment Obtenir les Identifiants Vonage
 
-### Étape 1 : Créer un Compte Vonage
+### Étape 1 : Créer un Compte Twilio
 
-1. Allez sur [https://www.vonage.com/](https://www.vonage.com/)
-2. Cliquez sur **"Sign up"** pour créer un compte
-3. Complétez les informations requises (Email, Mot de passe, Entreprise, etc.)
-4. Acceptez les conditions d'utilisation
+1. Allez sur [https://www.twilio.com/try-twilio](https://www.twilio.com/try-twilio)
+2. Créez un compte gratuit avec votre email et numéro de téléphone
+3. Vérifiez votre numéro de téléphone
 
-### Étape 2 : Vérifier Votre Email
+### Étape 2 : Obtenir vos Identifiants Console
 
-1. Vérifiez votre email pour confirmer votre compte
-2. Vous recevrez un email de confirmation avec un lien d'activation
-3. Cliquez sur le lien pour activer votre compte
+1. Connectez-vous à [https://console.twilio.com/](https://console.twilio.com/)
+2. **Account SID** → `TWILIO_ACCOUNT_SID` (début AC...)
+3. **Auth Token** → `TWILIO_AUTH_TOKEN` (copiez-le maintenant !)
 
-### Étape 3 : Accéder à la Console Vonage
+### Étape 3 : Acheter un Numéro SMS
 
-1. Connectez-vous à [https://dashboard.vonage.com/](https://dashboard.vonage.com/)
-2. Allez dans **"Settings"** → **"API credentials"**
-3. Vous verrez vos identifiants :
-   - **API Key** → `VONAGE_API_KEY`
-   - **API Secret** → `VONAGE_API_SECRET`
-
-### Étape 4 : Configurer un Numéro Expéditeur
-
-1. Dans la console Vonage, allez dans **"SMS"** → **"Settings"**
-2. Configurez le **"Sender ID"** (le nom ou numéro qui apparaîtra sur l'SMS)
-3. Utilisez ce sender ID pour la variable `VONAGE_FROM`
+1. Allez dans **Phone Numbers** → **Buy a Number**
+2. Sélectionnez un numéro capable d'envoyer SMS
+3. Achetez le numéro (gratuit en essai)
+4. **Phone Number** → `TWILIO_FROM_PHONE` (format +1XXXXXXXXXX)
 
 ## ⚙️ Configuration du Backend
 
