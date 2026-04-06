@@ -4,6 +4,11 @@ import { createHash } from 'crypto';
 
 const logger = getLogger('CloudinaryService');
 type CloudinaryUploadResponse = { secure_url?: string };
+type UploadFileInput = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname?: string;
+};
 
 @Injectable()
 export class CloudinaryService {
@@ -47,6 +52,28 @@ export class CloudinaryService {
     return createHash('sha1').update(`${sortedParams}${this.apiSecret}`).digest('hex');
   }
 
+  private async performUpload(form: FormData) {
+    logger.log('Uploading image to Cloudinary');
+    const response = await fetch(this.baseUrl, {
+      method: 'POST',
+      body: form,
+    });
+
+    let payload: CloudinaryUploadResponse | null = null;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      logger.warn('Cloudinary response parse failed', error);
+    }
+
+    if (!response.ok || !payload?.secure_url) {
+      logger.error('Cloudinary upload failed', payload);
+      throw new InternalServerErrorException('Impossible d\'uploader l\'image');
+    }
+
+    return payload.secure_url as string;
+  }
+
   async upload(dataUrl: string) {
     if (this.skipUpload) {
       logger.warn('SKIP_CLOUDINARY_UPLOAD=true, returning data URL without uploading.');
@@ -69,29 +96,41 @@ export class CloudinaryService {
       form.append('folder', this.folder);
     }
 
-    logger.log('Uploading image to Cloudinary');
     try {
-      const response = await fetch(this.baseUrl, {
-        method: 'POST',
-        body: form,
-      });
-
-      let payload: CloudinaryUploadResponse | null = null;
-      try {
-        payload = await response.json();
-      } catch (error) {
-        logger.warn('Cloudinary response parse failed', error);
-      }
-
-      if (!response.ok || !payload?.secure_url) {
-        logger.error('Cloudinary upload failed', payload);
-        throw new InternalServerErrorException('Impossible d\'uploader l\'image');
-      }
-
-      return payload.secure_url as string;
+      return await this.performUpload(form);
     } catch (error) {
       logger.warn('Cloudinary upload request failed, falling back to local data URL', error);
       return dataUrl;
+    }
+  }
+
+  async uploadFile(file: UploadFileInput) {
+    if (this.skipUpload) {
+      logger.warn('SKIP_CLOUDINARY_UPLOAD=true, returning local data URL without uploading.');
+      return this.toDataUrl(file);
+    }
+
+    this.ensureConfigured();
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const form = new FormData();
+    const blob = new Blob([file.buffer], {
+      type: file.mimetype || 'application/octet-stream',
+    });
+
+    form.append('file', blob, file.originalname || 'upload');
+    form.append('api_key', this.apiKey);
+    form.append('timestamp', timestamp.toString());
+    form.append('signature', this.getSignature(timestamp));
+    if (this.folder) {
+      form.append('folder', this.folder);
+    }
+
+    try {
+      return await this.performUpload(form);
+    } catch (error) {
+      logger.warn('Cloudinary file upload request failed, falling back to local data URL', error);
+      return this.toDataUrl(file);
     }
   }
 
@@ -102,5 +141,18 @@ export class CloudinaryService {
       uploaded.push(await this.upload(image));
     }
     return uploaded;
+  }
+
+  async uploadManyFiles(files: UploadFileInput[]) {
+    const uploaded = [];
+    for (const file of files) {
+      uploaded.push(await this.uploadFile(file));
+    }
+    return uploaded;
+  }
+
+  private toDataUrl(file: UploadFileInput) {
+    const mime = file.mimetype || 'application/octet-stream';
+    return `data:${mime};base64,${file.buffer.toString('base64')}`;
   }
 }

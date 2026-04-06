@@ -11,6 +11,12 @@ import { getLogger } from '@/common/utils/logger';
 
 const logger = getLogger('ProductsService');
 
+type ProductUploadFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname?: string;
+};
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -95,9 +101,9 @@ export class ProductsService {
     return [...featuredProducts, ...additionalProducts];
   }
 
-  async create(dto: CreateProductDto) {
+  async create(dto: CreateProductDto, files: ProductUploadFile[] = []) {
     logger.log(`Creating product: ${dto.name}`);
-    const images = await this.uploadImages(dto.images);
+    const images = await this.resolveImages(dto.images, dto.existingImages, files);
     return this.prisma.product.create({
       data: {
         name: dto.name,
@@ -118,18 +124,31 @@ export class ProductsService {
     });
   }
 
-  async update(id: string, dto: UpdateProductDto) {
+  async update(
+    id: string,
+    dto: UpdateProductDto,
+    files: ProductUploadFile[] = [],
+  ) {
     logger.log(`Updating product ${id}`);
     await this.findById(id); // Check if exists
 
-    const processedImages = dto.images ? await this.uploadImages(dto.images) : undefined;
+    const { images, existingImages, ...updateData } = dto;
+    const hasImagePayload =
+      images !== undefined ||
+      existingImages !== undefined ||
+      files.length > 0;
+    const processedImages = hasImagePayload
+      ? await this.resolveImages(images, existingImages, files)
+      : undefined;
 
     return this.prisma.product.update({
       where: { id },
       data: {
-        ...dto,
+        ...updateData,
         ...(processedImages ? { images: processedImages } : {}),
-        slug: dto.slug || (dto.name ? dto.name.toLowerCase().replace(/\s+/g, '-') : undefined),
+        slug:
+          updateData.slug ||
+          (updateData.name ? updateData.name.toLowerCase().replace(/\s+/g, '-') : undefined),
       },
       include: { category: true },
     });
@@ -185,5 +204,22 @@ export class ProductsService {
     }
 
     return this.cloudinary.uploadMany(safeImages);
+  }
+
+  private async resolveImages(
+    images?: string[],
+    existingImages?: string[],
+    files: ProductUploadFile[] = [],
+  ) {
+    const preservedImages = existingImages?.filter((url) => Boolean(url)) ?? [];
+    const legacyImages = images?.filter((url) => Boolean(url)) ?? [];
+    const uploadedLegacyImages = legacyImages.length
+      ? await this.uploadImages(legacyImages)
+      : [];
+    const uploadedFiles = files.length
+      ? await this.cloudinary.uploadManyFiles(files)
+      : [];
+
+    return [...new Set([...preservedImages, ...uploadedLegacyImages, ...uploadedFiles])];
   }
 }

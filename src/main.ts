@@ -31,8 +31,10 @@ async function bootstrap() {
       },
     }),
   );
-  app.use(bodyParser.json({ limit: '5mb' }));
-  app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
+  // Keep a comfortable JSON/body limit for legacy payloads and rich forms.
+  const bodyLimit = process.env.BODY_PARSER_LIMIT || '20mb';
+  app.use(bodyParser.json({ limit: bodyLimit }));
+  app.use(bodyParser.urlencoded({ extended: true, limit: bodyLimit }));
 
   // Global Exception Filter
   app.useGlobalFilters(new HttpExceptionFilter());

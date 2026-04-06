@@ -27,7 +27,7 @@ export class SmsService {
   async sendSms(phone: string, message: string): Promise<boolean> {
     logger.log(`Tentative d'envoi SMS à ${phone}`);
 
-  if (this.isProductionMode && this.twilioClient) {
+    if (this.isProductionMode && this.twilioClient) {
       // Mode production : envoi réel via Twilio
       return this.sendRealSms(phone, message);
     } else {
@@ -53,10 +53,10 @@ export class SmsService {
       if (result.sid) {
         logger.log(`SMS envoyé avec succès à ${phone} (SID: ${result.sid})`);
         return true;
-      } else {
-        logger.error(`Échec de l'envoi SMS à ${phone}`);
-        return false;
       }
+
+      logger.error(`Échec de l'envoi SMS à ${phone}`);
+      throw new Error('Échec de l\'envoi du SMS');
     } catch (error) {
       logger.error(`Erreur lors de l'envoi du SMS à ${phone}:`, error);
       throw new Error('Impossible d\'envoyer le SMS');
@@ -68,14 +68,6 @@ export class SmsService {
 
     // Simuler un délai réseau réaliste
     await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-
-    // Simuler occasionnellement un échec (5% de chance)
-    const shouldFail = Math.random() < 0.05;
-
-    if (shouldFail) {
-      logger.warn(`[MODE DÉVELOPPEMENT] Simulation d'échec d'envoi SMS à ${phone}`);
-      throw new Error('Erreur simulée lors de l\'envoi du SMS');
-    }
 
     logger.log(`[MODE DÉVELOPPEMENT] SMS simulé envoyé à ${phone}: "${message}"`);
     return true;

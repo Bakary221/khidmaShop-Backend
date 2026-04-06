@@ -63,12 +63,12 @@ export class AuthService {
 
       if (!user) {
         user = await this.prisma.user.create({
-        data: {
-          phone: normalizedPhone,
-          name: `User ${dto.phone}`,
-          role: 'CLIENT',
-        },
-      });
+          data: {
+            phone: normalizedPhone,
+            name: `User ${dto.phone}`,
+            role: 'CLIENT',
+          },
+        });
         logger.log(`Utilisateur créé: ${user.id}`);
       }
 
@@ -88,10 +88,20 @@ export class AuthService {
 
       return { requestId: otpRecord.id };
     } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof UnauthorizedException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
       logger.error('Échec de l\'envoi du code OTP:', error);
       throw new BadRequestException(
-        ErrorCode.INVALID_INPUT,
-        'Échec du traitement de la demande OTP',
+        ErrorCode.INTERNAL_SERVER_ERROR,
+        error instanceof Error
+          ? error.message
+          : 'Échec du traitement de la demande OTP',
       );
     }
   }

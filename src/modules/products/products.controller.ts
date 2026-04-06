@@ -9,8 +9,13 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFiles,
+  UnsupportedMediaTypeException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+const { memoryStorage } = require('multer');
 import { ProductsService } from './products.service';
 import {
   CreateProductDto,
@@ -20,6 +25,40 @@ import {
 import { RolesGuard } from '@/common/guards/roles.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { Public } from '@/core/decorators/public.decorator';
+
+const PRODUCT_IMAGE_MAX_SIZE_MB = parseInt(
+  process.env.PRODUCT_IMAGE_MAX_SIZE_MB || '25',
+  10,
+);
+
+type ProductUploadFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname?: string;
+};
+
+type ProductUploadFiles = {
+  images?: ProductUploadFile[];
+};
+
+const productUploadOptions = {
+  storage: memoryStorage(),
+  limits: {
+    files: 10,
+    fileSize: PRODUCT_IMAGE_MAX_SIZE_MB * 1024 * 1024,
+  },
+  fileFilter: (_req: unknown, file: { mimetype?: string }, cb: (error: Error | null, acceptFile: boolean) => void) => {
+    if (!file.mimetype?.startsWith('image/')) {
+      cb(
+        new UnsupportedMediaTypeException('Seules les images sont acceptées'),
+        false,
+      );
+      return;
+    }
+
+    cb(null, true);
+  },
+};
 
 @ApiTags('Products')
 @Controller('products')
@@ -67,18 +106,29 @@ export class ProductsController {
   @UseGuards(RolesGuard)
   @Roles('ADMIN')
   @ApiBearerAuth('access-token')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }], productUploadOptions))
   @ApiOperation({ summary: 'Create product (admin only)' })
-  async create(@Body() dto: CreateProductDto) {
-    return this.productsService.create(dto);
+  async create(
+    @Body() dto: CreateProductDto,
+    @UploadedFiles() files?: ProductUploadFiles,
+  ) {
+    return this.productsService.create(dto, files?.images ?? []);
   }
 
   @Put(':id')
   @UseGuards(RolesGuard)
   @Roles('ADMIN')
   @ApiBearerAuth('access-token')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }], productUploadOptions))
   @ApiOperation({ summary: 'Update product (admin only)' })
-  async update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
-    return this.productsService.update(id, dto);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateProductDto,
+    @UploadedFiles() files?: ProductUploadFiles,
+  ) {
+    return this.productsService.update(id, dto, files?.images ?? []);
   }
 
   @Patch(':id/toggle')
