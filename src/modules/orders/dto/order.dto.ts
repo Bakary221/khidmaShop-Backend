@@ -54,3 +54,34 @@ export class UpdateOrderStatusDto {
   @IsEnum(['PENDING', 'CONFIRMED', 'DELIVERED', 'CANCELLED'])
   status: string;
 }
+
+export class CheckPhoneDto {
+  @IsPhoneNumber(null)
+  phone: string;
+}
+
+export class CreateGuestOrderDto {
+  @IsPhoneNumber(null)
+  phone: string;
+
+  @IsString()
+  @IsOptional()
+  customerName?: string;
+
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @IsNumber()
+  @IsOptional()
+  latitude?: number;
+
+  @IsNumber()
+  @IsOptional()
+  longitude?: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemDto)
+  items: OrderItemDto[];
+}

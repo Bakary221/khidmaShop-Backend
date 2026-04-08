@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { PrismaService } from '@/common/services/prisma.service';
-import { CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
+import { CreateOrderDto, UpdateOrderStatusDto, CreateGuestOrderDto } from './dto/order.dto';
 import {
   NotFoundException,
   BadRequestException,
@@ -53,12 +53,30 @@ export class OrdersService {
       throw new NotFoundException('Order');
     }
 
-    // If CLIENT user, check if it's their order
     if (user && user.role === 'CLIENT' && order.userId !== user.sub) {
       throw new BadRequestException(
         ErrorCode.AUTH_FORBIDDEN,
         'Accès refusé',
       );
+    }
+
+    return order;
+  }
+
+  async findByIdPublic(id: string) {
+    logger.log(`Fetching public order ${id}`);
+
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order');
     }
 
     return order;
@@ -262,5 +280,155 @@ export class OrdersService {
     });
 
     return { total, pending, confirmed, delivered };
+  }
+
+  async searchOrdersByPhone(phone: string) {
+    logger.log(`Searching orders by phone: ${phone}`);
+    
+    const normalizedPhone = this.normalizePhone(phone);
+    
+    const orders = await this.prisma.order.findMany({
+      where: { phone: normalizedPhone },
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return orders;
+  }
+
+  async checkPhoneExists(phone: string) {
+    logger.log(`Checking phone: ${phone}`);
+    
+    const user = await this.prisma.user.findUnique({
+      where: { phone },
+      select: { id: true, name: true, address: true },
+    });
+
+    if (user) {
+      return { exists: true, user: { id: user.id, name: user.name, address: user.address ?? undefined } };
+    }
+
+    return { exists: false };
+  }
+
+  async createGuestOrder(dto: CreateGuestOrderDto) {
+    logger.log(`Creating guest order for phone: ${dto.phone}`);
+
+    if (!dto.items || dto.items.length === 0) {
+      throw new BadRequestException(
+        ErrorCode.ORDER_EMPTY,
+        'La commande doit contenir au moins un article',
+      );
+    }
+
+    const normalizedPhone = this.normalizePhone(dto.phone);
+    let user = await this.prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+    });
+
+    if (!user) {
+      if (!dto.customerName || !dto.address) {
+        throw new BadRequestException(
+          ErrorCode.USER_PROFILE_INCOMPLETE,
+          'Pour une première commande, le nom et l\'adresse sont requis',
+        );
+      }
+
+      user = await this.prisma.user.create({
+        data: {
+          phone: normalizedPhone,
+          name: dto.customerName,
+          address: dto.address,
+          role: 'CLIENT',
+        },
+      });
+      logger.log(`Guest user created: ${user.id}`);
+    } else if (dto.customerName || dto.address) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          ...(dto.customerName && { name: dto.customerName }),
+          ...(dto.address && { address: dto.address }),
+        },
+      });
+    }
+
+    let total = 0;
+    for (const item of dto.items) {
+      const product = await this.prisma.product.findUnique({
+        where: { id: item.productId },
+      });
+
+      if (!product) {
+        throw new NotFoundException(`Product ${item.productId}`);
+      }
+
+      if (product.stock < item.quantity) {
+        throw new BadRequestException(
+          ErrorCode.PRODUCT_OUT_OF_STOCK,
+          `Le produit ${product.name} n'a pas assez de stock`,
+        );
+      }
+
+      total += product.price * item.quantity;
+    }
+
+    const order = await this.prisma.order.create({
+      data: {
+        userId: user.id,
+        customerName: dto.customerName ?? user.name,
+        phone: normalizedPhone,
+        address: dto.address ?? user.address,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        total,
+        items: {
+          create: await Promise.all(
+            dto.items.map(async (item) => {
+              const product = await this.prisma.product.findUnique({
+                where: { id: item.productId },
+              });
+
+              return {
+                productId: item.productId,
+                quantity: item.quantity,
+                size: item.size,
+                color: item.color,
+                productSnapshot: {
+                  name: product.name,
+                  price: product.price,
+                  image: product.images[0] || '',
+                  brand: product.brand,
+                },
+              };
+            }),
+          ),
+        },
+      },
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+    });
+
+    logger.log(`Guest order created: ${order.id}`);
+
+    return order;
+  }
+
+  private normalizePhone(phone: string): string {
+    const digits = phone.replace(/[^\d]/g, '');
+    if (!digits) {
+      return phone;
+    }
+    if (phone.trim().startsWith('+')) {
+      return `+${digits}`;
+    }
+    return `+${digits}`;
   }
 }

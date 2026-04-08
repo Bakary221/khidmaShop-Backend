@@ -9,11 +9,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
+import { CreateOrderDto, UpdateOrderStatusDto, CheckPhoneDto, CreateGuestOrderDto } from './dto/order.dto';
 import { RolesGuard } from '@/common/guards/roles.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { Public } from '@/core/decorators/public.decorator';
 
 @ApiTags('Orders')
 @ApiBearerAuth('access-token')
@@ -38,13 +39,20 @@ export class OrdersController {
     return this.ordersService.getStats();
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get order details' })
   async findById(
     @Param('id') id: string,
-    @CurrentUser() user: JwtPayload,
   ) {
-    return this.ordersService.findById(id, user);
+    return this.ordersService.findByIdPublic(id);
+  }
+
+  @Public()
+  @Post('search')
+  @ApiOperation({ summary: 'Search orders by phone number' })
+  async searchOrders(@Body() dto: CheckPhoneDto) {
+    return this.ordersService.searchOrdersByPhone(dto.phone);
   }
 
   @Post()
@@ -54,6 +62,20 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.ordersService.create(dto, user);
+  }
+
+  @Public()
+  @Post('check-phone')
+  @ApiOperation({ summary: 'Check if phone exists in database' })
+  async checkPhone(@Body() dto: CheckPhoneDto) {
+    return this.ordersService.checkPhoneExists(dto.phone);
+  }
+
+  @Public()
+  @Post('guest')
+  @ApiOperation({ summary: 'Create guest order without authentication' })
+  async createGuestOrder(@Body() dto: CreateGuestOrderDto) {
+    return this.ordersService.createGuestOrder(dto);
   }
 
   @Patch(':id/cancel')
