@@ -17,6 +17,7 @@ export enum ErrorCode {
   PRODUCT_NOT_FOUND = 'PRODUCT_NOT_FOUND',
   PRODUCT_OUT_OF_STOCK = 'PRODUCT_OUT_OF_STOCK',
   PRODUCT_ALREADY_EXISTS = 'PRODUCT_ALREADY_EXISTS',
+  PRODUCT_HAS_ORDERS = 'PRODUCT_HAS_ORDERS',
 
   // Category errors
   CATEGORY_NOT_FOUND = 'CATEGORY_NOT_FOUND',
@@ -53,6 +54,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   [ErrorCode.PRODUCT_NOT_FOUND]: 'Produit non trouvé',
   [ErrorCode.PRODUCT_OUT_OF_STOCK]: 'Le produit est en rupture de stock',
   [ErrorCode.PRODUCT_ALREADY_EXISTS]: 'Le produit existe déjà',
+  [ErrorCode.PRODUCT_HAS_ORDERS]: 'Ce produit ne peut pas être supprimé car il est lié à des commandes',
 
   [ErrorCode.CATEGORY_NOT_FOUND]: 'Catégorie non trouvée',
   [ErrorCode.CATEGORY_ALREADY_EXISTS]: 'Catégorie existe déjà',

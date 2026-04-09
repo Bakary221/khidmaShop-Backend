@@ -6,7 +6,8 @@ import {
   UpdateProductDto,
   FilterProductsDto,
 } from './dto/product.dto';
-import { NotFoundException } from '@/core/exceptions/custom.exceptions';
+import { NotFoundException, BadRequestException } from '@/core/exceptions/custom.exceptions';
+import { ErrorCode } from '@/common/constants/error-codes';
 import { getLogger } from '@/common/utils/logger';
 
 const logger = getLogger('ProductsService');
@@ -169,11 +170,27 @@ export class ProductsService {
     logger.log(`Deleting product ${id}`);
     await this.findById(id); // Check if exists
 
-    await this.prisma.product.delete({
-      where: { id },
-    });
-
-    return { message: 'Produit supprimé avec succès' };
+    try {
+      await this.prisma.product.delete({
+        where: { id },
+      });
+      return { message: 'Produit supprimé avec succès' };
+    } catch (error: any) {
+      logger.error(`Failed to delete product ${id}`, error.message);
+      if (error.code === 'P2003') {
+        throw new BadRequestException(
+          ErrorCode.PRODUCT_HAS_ORDERS,
+          'Ce produit ne peut pas être supprimé car il est lié à des commandes existantes',
+        );
+      }
+      if (error.code === 'P2025') {
+        throw new NotFoundException('Product');
+      }
+      throw new BadRequestException(
+        ErrorCode.DATABASE_ERROR,
+        'Impossible de supprimer ce produit',
+      );
+    }
   }
 
   async getBrands() {
