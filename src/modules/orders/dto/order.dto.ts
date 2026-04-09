@@ -85,3 +85,8 @@ export class CreateGuestOrderDto {
   @Type(() => OrderItemDto)
   items: OrderItemDto[];
 }
+
+export class CancelGuestOrderDto {
+  @IsPhoneNumber(null)
+  phone: string;
+}

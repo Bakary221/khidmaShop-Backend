@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto, UpdateOrderStatusDto, CheckPhoneDto, CreateGuestOrderDto } from './dto/order.dto';
+import { CreateOrderDto, UpdateOrderStatusDto, CheckPhoneDto, CreateGuestOrderDto, CancelGuestOrderDto } from './dto/order.dto';
 import { RolesGuard } from '@/common/guards/roles.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
@@ -78,13 +78,14 @@ export class OrdersController {
     return this.ordersService.createGuestOrder(dto);
   }
 
+  @Public()
   @Patch(':id/cancel')
-  @ApiOperation({ summary: 'Cancel own order within 30 minutes (clients only)' })
+  @ApiOperation({ summary: 'Cancel order by phone (guest or authenticated)' })
   async cancelOrder(
     @Param('id') id: string,
-    @CurrentUser() user: JwtPayload,
+    @Body() dto: CancelGuestOrderDto,
   ) {
-    return this.ordersService.cancelOrder(id, user);
+    return this.ordersService.cancelOrderByPhone(id, dto.phone);
   }
 
   @Patch(':id/status')

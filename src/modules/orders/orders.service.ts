@@ -252,6 +252,54 @@ export class OrdersService {
     });
   }
 
+  async cancelOrderByPhone(orderId: string, phone: string) {
+    logger.log(`Cancelling order ${orderId} by phone ${phone}`);
+
+    const normalizedPhone = this.normalizePhone(phone);
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Commande');
+    }
+
+    if (order.phone !== normalizedPhone) {
+      throw new BadRequestException(
+        ErrorCode.AUTH_FORBIDDEN,
+        'Numéro de téléphone ne correspond pas à cette commande',
+      );
+    }
+
+    if (order.status !== 'PENDING') {
+      throw new BadRequestException(
+        ErrorCode.ORDER_CANNOT_CANCEL,
+        'Seules les commandes en attente peuvent être annulées',
+      );
+    }
+
+    const CANCEL_WINDOW_MS = 30 * 60 * 1000;
+    const elapsed = Date.now() - new Date(order.createdAt).getTime();
+
+    if (elapsed > CANCEL_WINDOW_MS) {
+      throw new BadRequestException(
+        ErrorCode.ORDER_CANCEL_WINDOW_EXPIRED,
+        'Le délai d\'annulation de 30 minutes est dépassé',
+      );
+    }
+
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'CANCELLED' },
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+    });
+  }
+
   async updateStatus(id: string, dto: UpdateOrderStatusDto) {
     logger.log(`Updating order ${id} status to ${dto.status}`);
     await this.findById(id); // Check if exists
